@@ -27,3 +27,9 @@ realsense-viewer
 ``` bash
 pip install pyrealsense2
 ```
+## Set up environment for yolov5
+```bash
+pip install PyYAML
+pip install ultralytics
+pip install -r requirements.txt
+```
