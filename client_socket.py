@@ -36,7 +36,6 @@ def process_video():
     from ultralytics import YOLO
     model = YOLO('yolov8n.pt')
     while True:
-        # print(f"frame queue size:{frame_queue.qsize()}")
         try:
             frame = frame_queue.get_nowait()
             print("Get one frame to process")
@@ -44,6 +43,32 @@ def process_video():
             frame_raw = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             results = model(frame_raw)
             annotated_frame = results[0].plot()
+            #process qrcode
+            detector = cv2.QRCodeDetector()
+            retval, decoded_info, points, _ = detector.detectAndDecodeMulti(annotated_frame)
+            if retval:
+                print(f"Decoded Information: {decoded_info}")
+                #draw the result of decoded QRCode
+                height, width = annotated_frame.shape[:2]
+                minX = 100000
+                minY = 100000
+                maxX = -1
+                maxY = -1
+                assert len(points) == len(decoded_info)
+                for point,decoded_val in zip(points, decoded_info):
+                    for idx in range(point.shape[0]):
+                        x = int(point[idx][0])
+                        y = int(point[idx][1])
+                        minX = x if x < minX else minX
+                        minY = y if y < minY else minY
+                        maxX = x if x > maxX else maxX
+                        maxY = y if y > maxY else maxY
+                    cv2.rectangle(annotated_frame, (minX, minY), (maxX, maxY), color=(0,255,0), thickness=2)
+                    text_x = min(minX+10, width-1)
+                    text_y = max(0, minY - 5)
+                    text_info = "qrcode: " + decoded_val
+                    cv2.putText(annotated_frame, text_info,(text_x,text_y), cv2.FONT_HERSHEY_COMPLEX,0.75,(0,255,0),2)
+
             result_queue.put(annotated_frame)
         except queue.Empty:
             print("process Queue is empty")

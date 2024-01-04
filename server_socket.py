@@ -63,7 +63,7 @@ sending_thread.start()
 def show_received():
     data = b""
     payload_size = struct.calcsize("L")
-    print("Debug, ======payload size:", payload_size)
+    # print("Debug, ======payload size:", payload_size)
 
     while True:
         try:
