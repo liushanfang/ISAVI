@@ -6,6 +6,8 @@ import numpy as np
 import threading
 import queue
 import time
+from renderProcess import render_result
+from unifiedData import InputData
 
 frame_queue = queue.Queue()
 result_queue = queue.Queue()
@@ -37,19 +39,24 @@ def process_video():
     model = YOLO('yolov8n.pt')
     while True:
         try:
-            frame = frame_queue.get_nowait()
+            input = frame_queue.get_nowait()
             print("Get one frame to process")
-            nparr = np.frombuffer(frame, np.uint8)
+
+            nparr = np.frombuffer(input.color_data, np.uint8)
             frame_raw = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             results = model(frame_raw)
-            annotated_frame = results[0].plot()
+            # annotated_frame = results[0].plot()
+            depth_data = input.depth_data
+            depth_dim = input.unit_dim
+            detect_boxes = results[0].boxes
+            result_frame = render_result(frame_raw, depth_data, depth_dim, detect_boxes)
             #process qrcode
             detector = cv2.QRCodeDetector()
-            retval, decoded_info, points, _ = detector.detectAndDecodeMulti(annotated_frame)
+            retval, decoded_info, points, _ = detector.detectAndDecodeMulti(result_frame)
             if retval:
                 print(f"Decoded Information: {decoded_info}")
                 #draw the result of decoded QRCode
-                height, width = annotated_frame.shape[:2]
+                height, width = result_frame.shape[:2]
                 minX = 100000
                 minY = 100000
                 maxX = -1
@@ -63,13 +70,13 @@ def process_video():
                         minY = y if y < minY else minY
                         maxX = x if x > maxX else maxX
                         maxY = y if y > maxY else maxY
-                    cv2.rectangle(annotated_frame, (minX, minY), (maxX, maxY), color=(0,255,0), thickness=2)
+                    cv2.rectangle(result_frame, (minX, minY), (maxX, maxY), color=(0,255,0), thickness=2)
                     text_x = min(minX+10, width-1)
                     text_y = max(0, minY - 5)
                     text_info = "qrcode: " + decoded_val
-                    cv2.putText(annotated_frame, text_info,(text_x,text_y), cv2.FONT_HERSHEY_COMPLEX,0.75,(0,255,0),2)
+                    cv2.putText(result_frame, text_info,(text_x,text_y), cv2.FONT_HERSHEY_COMPLEX,0.75,(0,255,0),2)
 
-            result_queue.put(annotated_frame)
+            result_queue.put(result_frame)
         except queue.Empty:
             print("process Queue is empty")
             time.sleep(0.1)
