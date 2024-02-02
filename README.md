@@ -34,6 +34,15 @@ pip install PyYAML
 pip install ultralytics
 pip install -r requirements.txt
 ```
+## Set up environment for ocr part
+reference [cnOCR](https://cnocr.readthedocs.io/zh/latest/install/)
+```bash
+$ pip install cnocr[ort-cpu]
+```
+or on gpu
+```bash
+$ pip install cnocr[ort-gpu]
+```
 ## Set up environment for rtmp-server
 ```bash
 sudo apt-get update
