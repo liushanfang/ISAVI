@@ -2,25 +2,25 @@ import cv2
 import socket
 import struct
 import pickle
+from cnocr import CnOcr
+from PIL import ImageFont, ImageDraw, Image
 import numpy as np
 import threading
 import queue
 import time
 from renderProcess import render_result
-from unifiedData import InputData
+from unifiedData import InputData, outputData
 
 frame_queue = queue.Queue()
 result_queue = queue.Queue()
 MAX_QUEUE_SIZE=500
-
+ocr_threshold = 0.5
 
 def send_back():
     while True:
         try:
             result = result_queue.get_nowait()
-            _, img = cv2.imencode(".jpg", result)
-            img_bytes = img.tobytes()
-            result_data = pickle.dumps(img_bytes)
+            result_data = pickle.dumps(result)
             try:
                 print(f"send result data, length of data:{len(result_data)}")
                 # client_socket.setblocking(0)
@@ -49,14 +49,15 @@ def process_video():
             depth_data = input.depth_data
             depth_dim = input.unit_dim
             detect_boxes = results[0].boxes
+            frm_id = input.frame_id
             result_frame = render_result(frame_raw, depth_data, depth_dim, detect_boxes)
             #process qrcode
             detector = cv2.QRCodeDetector()
             retval, decoded_info, points, _ = detector.detectAndDecodeMulti(result_frame)
+            height, width = result_frame.shape[:2]
             if retval:
                 print(f"Decoded Information: {decoded_info}")
                 #draw the result of decoded QRCode
-                height, width = result_frame.shape[:2]
                 minX = 100000
                 minY = 100000
                 maxX = -1
@@ -75,8 +76,45 @@ def process_video():
                     text_y = max(0, minY - 5)
                     text_info = "qrcode: " + decoded_val
                     cv2.putText(result_frame, text_info,(text_x,text_y), cv2.FONT_HERSHEY_COMPLEX,0.75,(0,255,0),2)
+            #process ocr part
+            ocr = CnOcr(rec_model_name='chinese_cht_PP-OCRv3')
+            out = ocr.ocr(frame_raw)
 
-            result_queue.put(result_frame)
+            ocr_text = ''
+            fontPath = 'ocr/NotoSerifTC-Regular.otf'
+            font = ImageFont.truetype(fontPath, 20)    #set font size
+            imgPil = Image.fromarray(result_frame)
+            draw = ImageDraw.Draw(imgPil)
+            for i in range(len(out)):
+                if out[i]['score'] > ocr_threshold:
+                    coords = out[i]['position']
+                    minX = 100000
+                    maxX = -1
+                    minY = 100000
+                    maxY = -1
+                    for coord in coords:
+                        x = int(coord[0])
+                        y = int(coord[1])
+                        minX = minX if minX < x else x
+                        minY = minY if minY < y else y
+                        maxX = maxX if maxX > x else x
+                        maxY = maxY if maxY > y else y
+                    if len(out[i]['text']) <= 0:
+                        print("skip")
+                        continue
+                    ocr_text = ocr_text + out[i]['text']
+                    draw.rectangle([(minX, minY), (maxX, maxY)], outline="green")
+                    text_x = min(minX+10, width-1)
+                    text_y = max(0, minY-5)
+
+                    draw.text((text_x, text_y), out[i]['text'], fill=(0,0,255), font=font)
+
+            print(f"ocr text: {ocr_text}")
+            out_frame = np.array(imgPil)
+            _, img = cv2.imencode(".jpg", out_frame)
+            img_bytes = img.tobytes()
+            out_result = outputData(img_bytes, width, height, frame_id=frm_id, ocr_text=ocr_text)
+            result_queue.put(out_result)
         except queue.Empty:
             print("process Queue is empty")
             time.sleep(0.1)

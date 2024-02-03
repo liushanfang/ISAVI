@@ -7,7 +7,7 @@ import cv2
 import threading
 import queue
 import time
-from unifiedData import InputData
+from unifiedData import InputData, outputData
 import io
 
 # Server configuration
@@ -62,7 +62,7 @@ def send_frame():
         data = pickle.dumps(input)
         # Send the length of the serialized data to the client
         try:
-            print(f"send data, length of data:{len(data)}")
+            # print(f"send data, length of data:{len(data)}")
             connection.sendall(struct.pack("L", len(data)) + data)
             ret = connection.settimeout(0.2)
         except:
@@ -91,9 +91,13 @@ def show_received():
             data = data[msg_size:]
 
             # Deserialize the frame
-            frame = pickle.loads(frame_data)
+            result_data = pickle.loads(frame_data)
+            frame = result_data.data
+            frm_id = result_data.frame_id
+            frm_text = result_data.text
             nparr = np.frombuffer(frame, np.uint8)
             frame_raw = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            print(f"receive result of frame: {frm_id}, ocr_text: {frm_text}")
             cv2.imshow('processed result', frame_raw)
             cv2.waitKey(10)
         except:
@@ -101,6 +105,7 @@ def show_received():
 
 
 try:
+    frm_id = 0
     while True:
         frames = pipeline.wait_for_frames()
         color_frame = frames.get_color_frame()
@@ -114,7 +119,8 @@ try:
         image_data = send_img.tobytes()
         unit_dim = 10
         depth_data = compress_depth_img(depth_in_meters, unit_dim)
-        input_frame = InputData(image_data, depth_data, img_width, img_height, unit_dim)
+        input_frame = InputData(image_data, depth_data, img_width, img_height, unit_dim, frm_id)
+        frm_id = frm_id + 1
         if frame_buffer.qsize() < MAX_BUFFER_SIZE:
             frame_buffer.put(input_frame)
         else:
